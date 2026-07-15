@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가상 경마 시뮬레이터 - 파멸의 시작</title>
+    <style>
+        /* 기본 배경 (빚이 없을 때) */
+        body { 
+            font-family: 'Malgun Gothic', sans-serif; 
+            background-color: #eceff1; 
+            color: #333;
+            text-align: center; 
+            margin: 0;
+            padding: 20px;
+            transition: background-color 1s ease, color 1s ease;
+        }
+        
+        /* 빚이 생겼을 때 화면 흔들림 효과 */
+        @keyframes anxietyShake {
+            0% { transform: translate(0, 0); }
+            20% { transform: translate(-2px, 1px); }
+            40% { transform: translate(1px, -2px); }
+            60% { transform: translate(-2px, -1px); }
+            80% { transform: translate(2px, 1px); }
+            100% { transform: translate(0, 0); }
+        }
+        .shake-level-1 { animation: anxietyShake 0.5s infinite; }
+        .shake-level-2 { animation: anxietyShake 0.2s infinite; }
+        
+        .container { 
+            max-width: 750px; 
+            margin: 0 auto; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
+            transition: background 1s ease;
+            position: relative;
+        }
+        
+        h1 { color: #2c3e50; margin-bottom: 5px; transition: color 1s ease; }
+        .subtitle { color: #7f8c8d; margin-bottom: 20px; font-size: 14px; }
+        
+        /* AI 해설위원 패널 - 여백 수정 */
+        .ai-commentator {
+            background: #e8f4f8;
+            border-left: 6px solid #3498db;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+            font-size: 15px;
+            font-weight: bold;
+            color: #2c3e50;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+        .ai-commentator span { color: #e74c3c; transition: color 0.3s ease; }
+
+        .status-board {
+            display: flex;
+            justify-content: space-around;
+            background: #fff3e0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 2px solid #d35400;
+            transition: all 1s ease;
+        }
+        .status-item { font-size: 20px; font-weight: bold; }
+        .status-item span { font-size: 24px; }
+        .points-text { color: #27ae60; }
+        .debt-text { color: #c0392b; }
+
+        .nav { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .nav button { 
+            flex: 1; padding: 12px; cursor: pointer; border: none; 
+            background: #e0e0e0; font-size: 15px; font-weight: bold; 
+            border-radius: 8px; transition: 0.3s;
+        }
+        .nav button.active { background: #34495e; color: white; }
+        .nav button#tab-loan { color: #c0392b; }
+        .nav button#tab-loan.active { background: #c0392b; color: white; }
+        
+        .page { display: none; animation: fadeIn 0.5s; }
+        .page.active { display: block; }
+        
+        /* 배팅 방식 선택 UI */
+        .bet-types { display: flex; justify-content: space-between; background: #f1f8e9; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .bet-types label { cursor: pointer; font-weight: bold; font-size: 15px; color: #2e7d32; }
+
+        /* 말 선택 그리드 */
+        .horse-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
+        .horse-btn { 
+            padding: 10px 5px; border: 2px solid #bdc3c7; background: #fdfdfd; 
+            cursor: pointer; font-weight: bold; border-radius: 8px; transition: 0.2s;
+            font-size: 14px; display: flex; flex-direction: column; align-items: center;
+        }
+        .horse-btn:hover { background: #ecf0f1; }
+        .horse-btn.selected { border-color: #e74c3c; background: #fadbd8; color: #c0392b; }
+        .horse-btn .horse-num { font-size: 16px; margin-bottom: 5px; }
+        .horse-btn .horse-stat { font-size: 11px; color: #7f8c8d; font-weight: normal; margin-top: 2px; }
+        .horse-btn .badge { font-size: 11px; background: #c0392b; color: white; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: none; }
+        .horse-btn.selected .badge { display: block; }
+
+        .controls-row { display: flex; gap: 10px; margin: 20px 0; align-items: center; justify-content: center;}
+        .controls-row input { padding: 10px; font-size: 16px; width: 120px; text-align: center; border: 1px solid #ccc; border-radius: 5px; }
+        
+        .start-btn { 
+            padding: 15px 40px; background: #27ae60; color: white; border: none; 
+            border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; 
+        }
+        .start-btn:disabled { background: #95a5a6; cursor: not-allowed; }
+        
+        /* 트랙 UI */
+        .track-container { margin: 20px 0; background: #e8f5e9; border: 2px solid #2ecc71; border-radius: 8px; position: relative; padding: 10px 0; overflow: hidden; }
+        .finish-line { position: absolute; right: 10%; top: 0; bottom: 0; width: 5px; background: repeating-linear-gradient(to bottom, #000, #000 10px, #fff 10px, #fff 20px); z-index: 1; }
+        .lane { height: 30px; border-bottom: 1px dashed #bdc3c7; position: relative; display: flex; align-items: center; }
+        .horse-sprite { position: absolute; left: 0; font-size: 24px; transition: left 0.05s linear; z-index: 2; display: flex; align-items: center; }
+        .horse-number { font-size: 12px; background: #333; color: white; border-radius: 50%; width: 18px; height: 18px; display: flex; justify-content: center; align-items: center; margin-right: 5px; }
+
+        #race-result { margin-top: 20px; font-size: 16px; line-height: 1.5; min-height: 80px; background: #f8f9fa; padding: 15px; border-radius: 8px; }
+
+        /* 대출 페이지 스타일 */
+        .loan-box { background: #111; color: #fff; padding: 25px; border-radius: 8px; border: 2px solid #8b0000; text-align: left; }
+        .loan-box h3 { color: #ff3333; margin-top: 0; }
+        .loan-action { display: flex; gap: 10px; margin-top: 20px; }
+        .loan-btn { padding: 10px 20px; background: #8b0000; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .loan-btn:hover { background: #a00000; }
+        .repay-btn { padding: 10px 20px; background: #2980b9; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        
+        /* 확률 페이지 */
+        .stats-box { background: #2c3e50; color: #ecf0f1; padding: 20px; border-radius: 8px; text-align: left; }
+        table { width: 100%; border-collapse: collapse; text-align: center; margin-top:10px; background: white; color: black; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+
+        /* 사채업자 배드 엔딩 오버레이 */
+        #game-over-screen {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: black; color: red; z-index: 9999; 
+            flex-direction: column; justify-content: center; align-items: center;
+            font-family: 'Malgun Gothic', serif;
+        }
+        #game-over-screen h1 { color: #ff0000; font-size: 50px; text-shadow: 2px 2px 10px rgba(255,0,0,0.8); margin-bottom: 20px; animation: anxietyShake 0.1s infinite; }
+        #game-over-screen p { font-size: 24px; color: #ccc; line-height: 1.8; text-align: center; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <!-- 게임 오버 스크린 (사채업자) -->
+    <div id="game-over-screen">
+        <h1>쾅! 쾅! 쾅!</h1>
+        <p>"어이, 안에 있는 거 다 알아. 문 열어."<br><br>
+        도박으로 돈을 탕진하고 빚을 갚지 못해<br>
+        결국 사채업자들에게 발각되었습니다.<br><br>
+        <strong>당신의 인생은 여기서 끝났습니다.</strong></p>
+    </div>
+
+    <div class="container" id="main-container">
+        <h1 id="main-title">🏇 박진감 넘치는 가상 경마</h1>
+        <div class="subtitle">배팅의 쾌감, 그리고 파멸</div>
+        
+        <div class="status-board" id="status-board">
+            <div class="status-item points-text">
+                내 포인트: <span id="current-points">20000</span> P
+            </div>
+            <div class="status-item debt-text">
+                갚아야 할 빚: <span id="current-debt">0</span> P
+            </div>
+        </div>
+
+        <div class="nav">
+            <button id="tab-bet" class="active" onclick="switchPage('betPage', 'tab-bet')">🐎 경마 배팅</button>
+            <button id="tab-loan" onclick="switchPage('loanPage', 'tab-loan')">🩸 급전 대출(사채)</button>
+            <button id="tab-prob" onclick="switchPage('probPage', 'tab-prob')">📊 현실 자각</button>
+        </div>
+
+        <!-- 1. 배팅 페이지 -->
+        <div id="betPage" class="page active">
+            <div class="bet-types">
+                <label><input type="radio" name="bet-type" value="win" checked onchange="handleBetTypeChange()"> 단승식 (1위 적중 / 5배)</label>
+                <label><input type="radio" name="bet-type" value="exacta" onchange="handleBetTypeChange()"> 쌍승식 (1, 2위 적중 / 50배)</label>
+                <label><input type="radio" name="bet-type" value="trifecta" onchange="handleBetTypeChange()"> 삼복승식 (1~3위 순서무관 / 80배)</label>
+            </div>
+
+            <div class="horse-grid" id="horse-grid"></div>
+            
+            <div class="controls-row">
+                <label for="bet-amount"><b>배팅 금액: </b></label>
+                <input type="number" id="bet-amount" value="1000" min="100" step="100"> P
+            </div>
+            
+            <button class="start-btn" id="start-btn" onclick="startRace()">경주 시작!</button>
+            
+            <!-- AI 해설위원 위치 이동: 경주 시작 버튼 아래, 트랙 위 -->
+            <div class="ai-commentator" id="ai-commentator">
+                🎙️ AI 해설위원: <span id="ai-text">오늘도 한탕을 노리는 호구... 아니, 승부사님 환영합니다. 각 말들의 컨디션과 승률을 분석해 보시죠! (참고: 배당률은 확률과 무관하게 고정입니다.)</span>
+            </div>
+            
+            <div class="track-container" id="track">
+                <div class="finish-line"></div>
+            </div>
+
+            <div id="race-result">말을 선택하고 경주를 시작해보세요!</div>
+        </div>
+
+        <!-- 2. 사채 대출 페이지 -->
+        <div id="loanPage" class="page">
+            <div class="loan-box">
+                <h3>⚠️ '김실장'의 급전 대출</h3>
+                <p>돈이 부족하십니까? 신용불량자도 즉시 대출해 드립니다.</p>
+                <ul style="color:#ff6666;">
+                    <li>최대 대출 한도: <strong>10,000 P</strong></li>
+                    <li>이자율: <strong>경주 1회당 원금의 30% 추가</strong></li>
+                    <li>주의: 돈을 갚지 못하고 파산할 경우, 목숨은 보장 못합니다.</li>
+                </ul>
+                
+                <div class="loan-action">
+                    <input type="number" id="loan-amount" value="5000" min="100" max="10000" step="1000" style="padding:10px; width:120px;">
+                    <button class="loan-btn" onclick="takeLoan()">대출 받기</button>
+                    <button class="repay-btn" onclick="repayLoan()">빚 갚기</button>
+                </div>
+                <p id="loan-msg" style="margin-top:15px; font-weight:bold;"></p>
+            </div>
+        </div>
+
+        <!-- 3. 확률 페이지 -->
+        <div id="probPage" class="page">
+            <div class="stats-box">
+                <p>당신이 돈을 잃고 사채까지 끌어다 쓰게 되는 수학적 이유입니다. (말의 컨디션이 아무리 좋아도 도박장의 기대수익은 마이너스입니다.)</p>
+                <table>
+                    <tr><th>방식</th><th>적중 확률 (평균)</th><th>기댓값 (1만P 배팅)</th></tr>
+                    <tr><td>단승식 (5배)</td><td>8.33%</td><td style="color:#e74c3c;">-5,833 P</td></tr>
+                    <tr><td>쌍승식 (50배)</td><td>0.75%</td><td style="color:#e74c3c;">-6,212 P</td></tr>
+                    <tr><td>삼복승식 (80배)</td><td>0.45%</td><td style="color:#e74c3c;">-6,363 P</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let points = 20000;
+        let debt = 0;
+        let selectedHorses = [];
+        let isRacing = false;
+        let currentBetType = 'win'; 
+        let maxSelections = 1;
+        const totalHorses = 12;
+        let horsesData = [];
+
+        const conditions = [
+            { text: '🔥 최상', color: '#e74c3c', speedBoost: 0.2 },
+            { text: '☀️ 좋음', color: '#e67e22', speedBoost: 0.1 },
+            { text: '☁️ 보통', color: '#2ecc71', speedBoost: 0 },
+            { text: '🌧️ 나쁨', color: '#3498db', speedBoost: -0.1 },
+            { text: '💀 최악', color: '#95a5a6', speedBoost: -0.2 }
+        ];
+
+        window.onload = () => {
+            initHorses();
+            updateStatus();
+        };
+
+        function setAIComment(text) {
+            let span = document.getElementById('ai-text');
+            span.style.color = 'transparent';
+            setTimeout(() => {
+                span.innerText = text;
+                span.style.color = '#e74c3c';
+            }, 150);
+        }
+
+        function initHorses() {
+            const grid = document.getElementById('horse-grid');
+            const track = document.getElementById('track');
+            grid.innerHTML = '';
+            track.innerHTML = '<div class="finish-line"></div>';
+            horsesData = [];
+
+            for(let i = 1; i <= totalHorses; i++) {
+                let condObj = conditions[Math.floor(Math.random() * conditions.length)];
+                let winRate = (Math.random() * 15 + 1).toFixed(1);
+                
+                horsesData.push({ id: i, condition: condObj, winRate: winRate });
+
+                let btn = document.createElement('div');
+                btn.className = 'horse-btn';
+                btn.id = `btn-${i}`;
+                btn.onclick = () => selectHorse(i);
+                
+                btn.innerHTML = `
+                    <div class="horse-num">${i}번</div>
+                    <div class="horse-stat" style="color:${condObj.color}; font-weight:bold;">${condObj.text}</div>
+                    <div class="horse-stat">승률 ${winRate}%</div>
+                    <span class="badge" id="badge-${i}"></span>
+                `;
+                grid.appendChild(btn);
+
+                let lane = document.createElement('div');
+                lane.className = 'lane';
+                lane.innerHTML = `<div class="horse-sprite" id="sprite-${i}"><div class="horse-number">${i}</div>🐎</div>`;
+                track.appendChild(lane);
+            }
+        }
+
+        function switchPage(pageId, tabId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+            document.getElementById('loan-msg').innerText = "";
+        }
+
+        function takeLoan() {
+            let amount = parseInt(document.getElementById('loan-amount').value);
+            if(amount <= 0) return;
+            if(debt + amount > 10000) {
+                document.getElementById('loan-msg').innerHTML = "<span style='color:red;'>김실장: '더 이상은 못 빌려줘. 있는 거나 갚아.'</span>";
+                return;
+            }
+            
+            points += amount;
+            debt += amount;
+            document.getElementById('loan-msg').innerHTML = `<span style='color:yellow;'>${amount}P 입금 완료. 이자는 경주마다 30%다. 처신 잘하라고.</span>`;
+            setAIComment("앗, 결국 사채에 손을 대셨군요... 도박 빚은 눈덩이처럼 불어나는 법입니다. 오늘 밤 무사하시길 빕니다.");
+            updateStatus();
+        }
+
+        function repayLoan() {
+            if(debt === 0) return document.getElementById('loan-msg').innerText = "갚을 빚이 없습니다.";
+            let amount = parseInt(document.getElementById('loan-amount').value);
+            if(amount > points) return document.getElementById('loan-msg').innerHTML = "<span style='color:red;'>가진 돈이나 확인하고 말해라.</span>";
+            if(amount > debt) amount = debt; 
+
+            points -= amount;
+            debt -= amount;
+            document.getElementById('loan-msg').innerHTML = `<span style='color:#3498db;'>${amount}P를 상환했습니다. 남은 빚: ${debt}P</span>`;
+            setAIComment("현명한 선택입니다! 빚부터 갚는 것이 인생의 진리죠. 하지만 도박을 끊지 않는 이상 도루묵입니다.");
+            updateStatus();
+        }
+
+        function updateAtmosphere() {
+            let body = document.body;
+            let container = document.getElementById('main-container');
+            let title = document.getElementById('main-title');
+            let statusBoard = document.getElementById('status-board');
+            
+            body.className = ''; 
+            
+            if (debt === 0) {
+                body.style.backgroundColor = '#eceff1';
+                container.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                title.style.color = '#2c3e50';
+                statusBoard.style.backgroundColor = '#fff3e0';
+            } else if (debt < 5000) {
+                body.style.backgroundColor = '#3e1a1a'; 
+                container.style.backgroundColor = 'rgba(255, 240, 240, 0.9)';
+                title.style.color = '#7f0000';
+            } else if (debt < 15000) {
+                body.style.backgroundColor = '#1a0000'; 
+                container.style.backgroundColor = 'rgba(50, 10, 10, 0.9)';
+                container.style.color = '#ddd';
+                title.style.color = '#ff3333';
+                statusBoard.style.backgroundColor = '#4a0000';
+                body.classList.add('shake-level-1'); 
+            } else {
+                body.style.backgroundColor = '#000000'; 
+                container.style.backgroundColor = 'rgba(20, 0, 0, 0.9)';
+                container.style.color = '#fff';
+                title.style.color = '#ff0000';
+                statusBoard.style.backgroundColor = '#300';
+                body.classList.add('shake-level-2'); 
+            }
+        }
+
+        function updateStatus() {
+            document.getElementById('current-points').innerText = points;
+            document.getElementById('current-debt').innerText = debt;
+            updateAtmosphere();
+        }
+
+        function checkGameOver() {
+            if (points <= 0 && debt > 0) {
+                document.getElementById('game-over-screen').style.display = 'flex';
+                return true;
+            }
+            return false;
+        }
+
+        function handleBetTypeChange() {
+            if(isRacing) return;
+            currentBetType = document.querySelector('input[name="bet-type"]:checked').value;
+            maxSelections = currentBetType === 'win' ? 1 : currentBetType === 'exacta' ? 2 : 3;
+            selectedHorses = [];
+            document.querySelectorAll('.horse-btn').forEach(btn => btn.classList.remove('selected'));
+            setAIComment(`배팅 방식을 변경하셨군요! 최대 ${maxSelections}마리의 말을 신중하게 골라주세요. 물론 당신의 돈은 제 껍니다.`);
+        }
+
+        function selectHorse(num) {
+            if(isRacing) return;
+            let idx = selectedHorses.indexOf(num);
+            if(idx > -1) selectedHorses.splice(idx, 1);
+            else {
+                if(selectedHorses.length >= maxSelections) return alert(`최대 ${maxSelections}마리만 고를 수 있습니다.`);
+                selectedHorses.push(num);
+            }
+            document.querySelectorAll('.horse-btn').forEach(btn => btn.classList.remove('selected'));
+            selectedHorses.forEach((h, i) => {
+                let btn = document.getElementById(`btn-${h}`);
+                let badge = document.getElementById(`badge-${h}`);
+                btn.classList.add('selected');
+                badge.innerText = currentBetType === 'exacta' ? `${i + 1}위 예상` : currentBetType === 'win' ? `우승` : `선택`;
+            });
+
+            if (selectedHorses.length > 0) {
+                let lastSelected = selectedHorses[selectedHorses.length - 1];
+                let horse = horsesData[lastSelected - 1];
+                let comment = `${lastSelected}번 말을 픽하셨군요! (승률 ${horse.winRate}%) `;
+                
+                if (horse.condition.speedBoost > 0) comment += "컨디션이 아주 좋습니다! 하지만 도박에 '절대'란 없다는 걸 곧 배우시겠죠.";
+                else if (horse.condition.speedBoost < 0) comment += "저런... 말의 상태가 영 안 좋아보이는데, 설마 역배당을 노리시나요? 무모하군요.";
+                else comment += "무난한 선택입니다. 과연 당신의 희망이 이뤄질까요?";
+
+                setAIComment(comment);
+            }
+        }
+
+        function startRace() {
+            if(selectedHorses.length !== maxSelections) return alert(`규칙에 맞게 ${maxSelections}마리를 선택해주세요!`);
+            let bet = parseInt(document.getElementById('bet-amount').value);
+            if(isNaN(bet) || bet <= 0) return alert('금액을 제대로 입력해라.');
+            if(bet > points) return alert('돈도 없는게 어디서 배팅을 해!');
+
+            isRacing = true;
+            points -= bet;
+            
+            if(debt > 0) {
+                let interest = Math.floor(debt * 0.3);
+                debt += interest;
+                alert(`[김실장] 경주가 시작됐군. 이자 ${interest}P가 추가됐다. 현재 빚: ${debt}P`);
+            }
+            
+            updateStatus();
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('race-result').innerHTML = "<span style='color:#e67e22; font-weight:bold;'>말들이 달린다... 빚을 갚을 수 있을까?</span>";
+            setAIComment("🚨 출발했습니다!!! 과연 당신의 헛된 희망은 현실이 될 것인가, 아니면 나락으로 떨어질 것인가!");
+
+            let horses = [];
+            for(let i = 1; i <= totalHorses; i++) {
+                document.getElementById(`sprite-${i}`).style.left = '0%';
+                horses.push({ id: i, pos: 0 });
+            }
+
+            let finishedRank = []; 
+            
+            // 실시간 멘트 플래그
+            let midCommentTriggered = false;
+            let endCommentTriggered = false;
+
+            let raceInterval = setInterval(() => {
+                let maxPos = 0;
+                let currentLeader = -1;
+
+                horses.forEach(horse => {
+                    if(!finishedRank.includes(horse.id)) {
+                        let speed = Math.random() * 1.8 + horsesData[horse.id - 1].condition.speedBoost;
+                        if (speed < 0.2) speed = 0.2; // 역주행 방지
+                        
+                        horse.pos += speed; 
+                        document.getElementById(`sprite-${horse.id}`).style.left = horse.pos + '%';
+                        
+                        // 현재 가장 앞서가는 말 파악
+                        if (horse.pos > maxPos) {
+                            maxPos = horse.pos;
+                            currentLeader = horse.id;
+                        }
+
+                        if(horse.pos >= 90) finishedRank.push(horse.id);
+                    }
+                });
+
+                // --- 경주 중간 실시간 AI 멘트 로직 ---
+                if (maxPos > 30 && maxPos < 65 && !midCommentTriggered) {
+                    midCommentTriggered = true;
+                    if (selectedHorses.includes(currentLeader)) {
+                        setAIComment(`현재 선두는 ${currentLeader}번!! 오호, 승부사님이 배팅한 말이 앞서가고 있습니다! 하지만 방심은 금물이죠!`);
+                    } else {
+                        setAIComment(`현재 선두 ${currentLeader}번 질주 중!! 어라? 승부사님이 고른 말은 어디 있나요? 벌써 돈 잃는 냄새가 납니다!`);
+                    }
+                } 
+                else if (maxPos >= 75 && !endCommentTriggered) {
+                    endCommentTriggered = true;
+                    if (selectedHorses.includes(currentLeader)) {
+                        setAIComment(`결승선이 코앞입니다!! ${currentLeader}번이 선두를 유지!! 이대로라면 돈을 따겠군요!! 과연 버틸 것인가!!`);
+                    } else {
+                        setAIComment(`결승선 직전!! 선두는 ${currentLeader}번!! 당신의 말은 쳐져 있습니다!! 당신의 소중한 포인트가 증발하기 직전입니다!!`);
+                    }
+                }
+
+                if(finishedRank.length === totalHorses) {
+                    clearInterval(raceInterval);
+                    finishRace(bet, finishedRank);
+                }
+            }, 30);
+        }
+
+        function finishRace(bet, finishedRank) {
+            isRacing = false;
+            document.getElementById('start-btn').disabled = false;
+
+            let won = false;
+            let multiplier = 0;
+            let f = finishedRank[0], s = finishedRank[1], t = finishedRank[2];
+
+            if(currentBetType === 'win' && selectedHorses[0] === f) { won = true; multiplier = 5.0; }
+            else if(currentBetType === 'exacta' && selectedHorses[0] === f && selectedHorses[1] === s) { won = true; multiplier = 50.0; }
+            else if(currentBetType === 'trifecta') {
+                let top3 = [f, s, t];
+                if(selectedHorses.every(h => top3.includes(h))) { won = true; multiplier = 80.0; }
+            }
+
+            let resultHtml = `<strong>🏁 최종 결과: 🥇1등(${f}번) / 🥈2등(${s}번) / 🥉3등(${t}번)</strong><br><br>`;
+            
+            if(won) {
+                let prize = Math.floor(bet * multiplier);
+                points += prize;
+                resultHtml += `<span style="color:#27ae60; font-weight:bold;">🎉 적중! ${prize} P 획득! (빨리 빚부터 갚아라)</span>`;
+                setAIComment(`놀랍게도 적중했습니다! ${multiplier}배당을 챙기셨군요. 달콤한 승리지만, 도박판에서 딴 돈은 결국 다시 도박판으로 돌아가기 마련입니다.`);
+            } else {
+                resultHtml += `<span style="color:#c0392b; font-weight:bold;">😭 낙첨. 배팅금 ${bet}P 증발.</span>`;
+                setAIComment(`역시나 낙첨입니다! 승률과 컨디션은 그저 헛된 희망이었습니다. 이렇게 또 귀중한 자산이 허공으로 사라졌습니다.`);
+            }
+
+            document.getElementById('race-result').innerHTML = resultHtml;
+            updateStatus();
+            
+            initHorses();
+            selectedHorses = [];
+            handleBetTypeChange();
+
+            setTimeout(checkGameOver, 500);
+        }
+    </script>
+</body>
+</html>
